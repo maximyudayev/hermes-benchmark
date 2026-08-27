@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+
+"""
+Usage:
+    Localhost:
+        python run_benchmark.py localhost -d 30 -r 2000 -b 100000000 --dry-run
+    Multi-device:
+        python run_benchmark.py multi-device -d 30 -r 2000 -b 100000000 --master-ip 192.168.0.190 --slave-ip 192.168.0.130 --slave-user jetson --slave-dir ~/Documents/hermes-benchmark --slave-os Linux --dry-run
+        python run_benchmark.py multi-device -d 30 -r 2000 -b 100000000 --master-ip 192.168.0.190 --slave-ip 192.168.0.146 --slave-user Owner --slave-dir D:\\hermes-benchmark --slave-os Windows --dry-run
+"""
+
 import os
 import sys
 import shutil
@@ -54,6 +64,9 @@ def handle_localhost(args):
     duration = args.duration
     dry_run = args.dry_run
 
+    start_rate = args.start_rate
+    start_byte = args.start_byte
+
     # Grid sweep
     memory_limit = 5*2**30 # 5 GB
     flush_period_s = 10
@@ -67,13 +80,9 @@ def handle_localhost(args):
         100,
         200,
         500,
-        1000,
-        2000,
-        5000,
-        10_000,
-        20_000,
-        50_000,
-        100_000,
+        1_000,
+        2_000,
+        5_000,
     ]
     bytes_grid = [
         10,
@@ -100,23 +109,30 @@ def handle_localhost(args):
         100_000_000,
     ]
 
+    rate_id = rates_grid.index(start_rate)
+    byte_id = bytes_grid.index(start_byte)
+    start_experiment = (byte_id * len(rates_grid)) + rate_id + 1
+    counter = 0
+
     print("\n=== Starting Localhost Message vs Frequency Sweep of Latency ===")
-    counter = 1
     total_experiments = len(bytes_grid) * len(rates_grid)
     output_path = Path("data/latency/localhost")
-    clean_dir_local(output_path, dry_run=dry_run)
     for b in bytes_grid:
-
         for r in rates_grid:
+            counter += 1
+            if counter < start_experiment:
+                continue
+
+            clean_dir_local(output_path / f"bytes_{b}" / f"rate_{r}", dry_run=dry_run)
+
             print(
                 f"\n[{counter}/{total_experiments}]: \tHERMES_EXP_NUM_BYTES={b}, HERMES_EXP_RATE={r}..."
             )
 
-            if b * r * flush_period_s > memory_limit:
+            if (8+8+4) * r * flush_period_s * 2 > memory_limit:
                 print(
                     f"[{counter}/{total_experiments}]: HERMES_EXP_NUM_BYTES={b}, HERMES_EXP_RATE={r} exceeds {memory_limit} memory limit."
                 )
-                counter += 1
                 continue
 
             env = os.environ.copy()
@@ -144,53 +160,25 @@ def handle_localhost(args):
                 if not args.continue_on_error:
                     sys.exit(1)
 
-            # TODO: verify dropout and time-dependent latency increase calculation
-            # calc_cmd = [
-            #     sys.executable,
-            #     "utils/calc_latency.py",
-            #     str(output_path),
-            #     str(counter),
-            #     str(r),
-            #     str(b),
-            #     "0",
-            # ]
-            # try:
-            #     run_command(calc_cmd, dry_run=dry_run)
-            # except subprocess.CalledProcessError as e:
-            #     print(f"Error calculating latency: {e}")
-            #     if not args.continue_on_error:
-            #         sys.exit(1)
-
-            # clean_dir_local(
-            #     output_path / "run_latency_vs_msgsize" / f"trial_{counter}",
-            #     dry_run=dry_run,
-            # )
-            counter += 1
-
-        # clean_dir_local(output_path / "run_latency_vs_msgsize", dry_run=dry_run)
-
 
 def handle_multi_device(args):
     hermes_cli = get_hermes_cli_path()
     duration = args.duration
     dry_run = args.dry_run
 
-    user = args.remote_user
-    host = args.remote_host
-    base_dir = args.remote_dir
-    remote_os = args.remote_os
+    master_ip = args.master_ip
+    slave_ip = args.slave_ip
+    slave_user = args.slave_user
+    slave_os = args.slave_os
+    slave_dir = args.slave_dir
 
-    # Pre-clean local directory structures
-    clean_dir_local(
-        Path("data/latency/multi_device/run_latency_vs_frequency"), dry_run=dry_run
-    )
-    clean_dir_local(
-        Path("data/latency/multi_device/run_latency_vs_msgsize"), dry_run=dry_run
-    )
+    start_rate = args.start_rate
+    start_byte = args.start_byte
 
-    # Grid 1: latency vs frequency
-    # We match the values from test_latency_multi_device.sh
-    rates_grid_1 = [
+    # Grid sweep
+    memory_limit = 5*2**30 # 5 GB
+    flush_period_s = 10
+    rates_grid = [
         1,
         2,
         5,
@@ -200,231 +188,113 @@ def handle_multi_device(args):
         100,
         200,
         500,
-        1000,
-        2000,
-        5000,
-        10000,
-        20000,
-        50000,
-        100000,
+        1_000,
+        2_000,
+        5_000,
     ]
-    fixed_bytes_1 = 1000
-
-    print("=== Starting Multi-Device Latency vs Frequency Sweep ===")
-    counter = 0
-    for r in rates_grid_1:
-        print(
-            f"\nStarting experiment {counter}: HERMES_EXP_NUM_BYTES={fixed_bytes_1}, HERMES_EXP_RATE={r}..."
-        )
-
-        env = os.environ.copy()
-        env["HERMES_EXP_NUM_BYTES"] = str(fixed_bytes_1)
-        env["HERMES_EXP_RATE"] = str(r)
-        env["HERMES_EXP_BUF_LEN"] = str(r * 100)
-
-        remote_path = f"{base_dir}/data/latency/multi_device/run_latency_vs_frequency/trial_{counter}"
-        local_path = (
-            Path("data/latency/multi_device/run_latency_vs_frequency")
-            / f"trial_{counter}"
-        )
-
-        # Inject envs
-        inject_cmd = [
-            sys.executable,
-            "utils/inject_envs.py",
-            "../config/slave_src.yml",
-            "../config/slave.yml",
-        ]
-        try:
-            run_command(inject_cmd, env=env, dry_run=dry_run)
-        except subprocess.CalledProcessError as e:
-            print(f"Error injecting environments: {e}")
-            if not args.continue_on_error:
-                sys.exit(1)
-
-        # Run master experiment
-        cmd = [
-            hermes_cli,
-            "-o",
-            "data/latency/multi_device",
-            "-d",
-            str(duration),
-            "--experiment",
-            "run=latency_vs_frequency",
-            f"trial={counter}",
-            "-f",
-            "../config/master.yml",
-        ]
-        try:
-            run_command(cmd, env=env, dry_run=dry_run)
-        except subprocess.CalledProcessError as e:
-            print(f"Error running experiment: {e}")
-            if not args.continue_on_error:
-                sys.exit(1)
-
-        # Copy results from remote device via SCP
-        if not dry_run:
-            local_path.mkdir(parents=True, exist_ok=True)
-
-        scp_cmd = ["scp", f"{user}@{host}:{remote_path}/*", f"{local_path}/"]
-        try:
-            run_command(scp_cmd, dry_run=dry_run)
-        except subprocess.CalledProcessError as e:
-            print(f"SCP command failed: {e}")
-            if not args.continue_on_error:
-                sys.exit(1)
-
-        # Calculate latency
-        calc_cmd = [
-            sys.executable,
-            "utils/calc_latency.py",
-            "data/latency/multi_device",
-            str(counter),
-            str(r),
-            str(fixed_bytes_1),
-            "1",
-        ]
-        try:
-            run_command(calc_cmd, dry_run=dry_run)
-        except subprocess.CalledProcessError as e:
-            print(f"Error calculating latency: {e}")
-            if not args.continue_on_error:
-                sys.exit(1)
-
-        # Clean up local logs
-        clean_dir_local(local_path, dry_run=dry_run)
-
-        # Clean up remote logs via SSH
-        try:
-            clean_dir_remote(user, host, remote_path, remote_os, dry_run=dry_run)
-        except subprocess.CalledProcessError as e:
-            print(f"Remote cleanup failed: {e}")
-            if not args.continue_on_error:
-                sys.exit(1)
-
-        print(
-            f"Completed experiment {counter}: HERMES_EXP_NUM_BYTES={fixed_bytes_1}, HERMES_EXP_RATE={r}..."
-        )
-        counter += 1
-
-    # Grid 2: latency vs msgsize
-    bytes_grid_2 = [
+    bytes_grid = [
         10,
         20,
         50,
         100,
         200,
         500,
-        1000,
-        2000,
-        5000,
-        10000,
-        20000,
-        50000,
-        100000,
-        200000,
-        500000,
-        1000000,
+        1_000,
+        2_000,
+        5_000,
+        10_000,
+        20_000,
+        50_000,
+        100_000,
+        200_000,
+        500_000,
+        1_000_000,
+        2_000_000,
+        5_000_000,
+        10_000_000,
+        20_000_000,
+        50_000_000,
+        100_000_000,
     ]
-    fixed_rate_2 = 100
-    fixed_buf_len_2 = 10000
 
-    print("\n=== Starting Multi-Device Latency vs Message Size Sweep ===")
+    rate_id = rates_grid.index(start_rate)
+    byte_id = bytes_grid.index(start_byte)
+    start_experiment = (byte_id * len(rates_grid)) + rate_id + 1
     counter = 0
-    for b in bytes_grid_2:
-        print(
-            f"\nStarting experiment {counter}: HERMES_EXP_NUM_BYTES={b}, HERMES_EXP_RATE={fixed_rate_2}..."
-        )
 
-        env = os.environ.copy()
-        env["HERMES_EXP_NUM_BYTES"] = str(b)
-        env["HERMES_EXP_RATE"] = str(fixed_rate_2)
-        env["HERMES_EXP_BUF_LEN"] = str(fixed_buf_len_2)
+    print("\n=== Starting Multi-Device Message vs Frequency Sweep of Latency ===")
+    total_experiments = len(bytes_grid) * len(rates_grid)
+    output_path = Path("data/latency/multi_device")
 
-        remote_path = f"{base_dir}/data/latency/multi_device/run_latency_vs_msgsize/trial_{counter}"
-        local_path = (
-            Path("data/latency/multi_device/run_latency_vs_msgsize")
-            / f"trial_{counter}"
-        )
+    for b in bytes_grid:
+        for r in rates_grid:
+            counter += 1
+            # Skip completed tests.
+            if counter < start_experiment:
+                continue
 
-        # Inject envs
-        inject_cmd = [
-            sys.executable,
-            "utils/inject_envs.py",
-            "../config/slave_src.yml",
-            "../config/slave.yml",
-        ]
-        try:
-            run_command(inject_cmd, env=env, dry_run=dry_run)
-        except subprocess.CalledProcessError as e:
-            print(f"Error injecting environments: {e}")
-            if not args.continue_on_error:
-                sys.exit(1)
+            clean_dir_local(output_path / f"bytes_{b}" / f"rate_{r}", dry_run=dry_run)
 
-        # Run master experiment
-        cmd = [
-            hermes_cli,
-            "-o",
-            "data/latency/multi_device",
-            "-d",
-            str(duration),
-            "--experiment",
-            "run=latency_vs_msgsize",
-            f"trial={counter}",
-            "-f",
-            "../config/master.yml",
-        ]
-        try:
-            run_command(cmd, env=env, dry_run=dry_run)
-        except subprocess.CalledProcessError as e:
-            print(f"Error running experiment: {e}")
-            if not args.continue_on_error:
-                sys.exit(1)
+            print(
+                f"\n[{counter}/{total_experiments}]: \tHERMES_EXP_NUM_BYTES={b}, HERMES_EXP_RATE={r}..."
+            )
 
-        # Copy results from remote device via SCP
-        if not dry_run:
-            local_path.mkdir(parents=True, exist_ok=True)
+            if (8+8+4) * r * flush_period_s * 2 > memory_limit:
+                print(
+                    f"[{counter}/{total_experiments}]: HERMES_EXP_NUM_BYTES={b}, HERMES_EXP_RATE={r} exceeds {memory_limit} memory limit."
+                )
+                continue
 
-        scp_cmd = ["scp", f"{user}@{host}:{remote_path}/*", f"{local_path}/"]
-        try:
-            run_command(scp_cmd, dry_run=dry_run)
-        except subprocess.CalledProcessError as e:
-            print(f"SCP command failed: {e}")
-            if not args.continue_on_error:
-                sys.exit(1)
+            env = os.environ.copy()
+            env["HERMES_EXP_MASTER_IP"] = str(master_ip)
+            env["HERMES_EXP_SLAVE_IP"] = str(slave_ip)
+            env["HERMES_EXP_SLAVE_USER"] = str(slave_user)
+            env["HERMES_EXP_SLAVE_OS"] = str(slave_os)
+            env["HERMES_EXP_SLAVE_PROJ_DIR"] = str(slave_dir)
+            env["HERMES_EXP_FLUSH_PERIOD_S"] = str(flush_period_s)
+            env["HERMES_EXP_NUM_BYTES"] = str(b)
+            env["HERMES_EXP_RATE"] = str(r)
+            env["HERMES_EXP_BUF_LEN"] = str(flush_period_s * r * 2)
 
-        # Calculate latency
-        calc_cmd = [
-            sys.executable,
-            "utils/calc_latency.py",
-            "data/latency/multi_device",
-            str(counter),
-            str(fixed_rate_2),
-            str(b),
-            "0",
-        ]
-        try:
-            run_command(calc_cmd, dry_run=dry_run)
-        except subprocess.CalledProcessError as e:
-            print(f"Error calculating latency: {e}")
-            if not args.continue_on_error:
-                sys.exit(1)
+            remote_path = f"{slave_dir}/data/latency/multi_device/run_latency_vs_frequency/trial_{counter}"
+            local_path = (
+                Path("data/latency/multi_device/run_latency_vs_frequency")
+                / f"trial_{counter}"
+            )
 
-        # Clean up local logs
-        clean_dir_local(local_path, dry_run=dry_run)
+            # Inject envs
+            inject_cmd = [
+                sys.executable,
+                "../utils/inject_envs.py",
+                "../config/slave_src.yml",
+                "../config/slave.yml",
+            ]
+            try:
+                run_command(inject_cmd, env=env, dry_run=dry_run)
+            except subprocess.CalledProcessError as e:
+                print(f"Error injecting environments: {e}")
+                if not args.continue_on_error:
+                    sys.exit(1)
 
-        # Clean up remote logs via SSH
-        try:
-            clean_dir_remote(user, host, remote_path, remote_os, dry_run=dry_run)
-        except subprocess.CalledProcessError as e:
-            print(f"Remote cleanup failed: {e}")
-            if not args.continue_on_error:
-                sys.exit(1)
-
-        print(
-            f"Completed experiment {counter}: HERMES_EXP_NUM_BYTES={b}, HERMES_EXP_RATE={fixed_rate_2}..."
-        )
-        counter += 1
+            # Run master experiment
+            cmd = [
+                hermes_cli,
+                "-o",
+                "data/latency/multi_device",
+                "-d",
+                str(duration),
+                "--experiment",
+                f"bytes={b}",
+                f"rate={r}",
+                "-f",
+                "../config/master.yml",
+            ]
+            try:
+                run_command(cmd, env=env, dry_run=dry_run)
+            except subprocess.CalledProcessError as e:
+                print(f"Error running experiment: {e}")
+                if not args.continue_on_error:
+                    sys.exit(1)
 
 
 def handle_plot(args):
@@ -450,6 +320,20 @@ def main():
         help="Duration for each experiment run in seconds (default: 60)",
     )
     lh_parser.add_argument(
+        "-r",
+        "--start-rate",
+        type=int,
+        default=1,
+        help="Start rate of the experiment (default: 1)",
+    )
+    lh_parser.add_argument(
+        "-b",
+        "--start-byte",
+        type=int,
+        default=10,
+        help="Start bytes of the experiment (default: 10)",
+    )
+    lh_parser.add_argument(
         "--dry-run", action="store_true", help="Print commands without executing them"
     )
     lh_parser.add_argument(
@@ -470,28 +354,48 @@ def main():
         help="Duration for each experiment run in seconds (default: 60)",
     )
     md_parser.add_argument(
-        "--remote-user",
-        type=str,
-        default="a",
-        help="SSH username for the remote slave device",
+        "-r",
+        "--start-rate",
+        type=int,
+        default=1,
+        help="Start rate of the experiment (default: 1)",
     )
     md_parser.add_argument(
-        "--remote-host",
+        "-b",
+        "--start-byte",
+        type=int,
+        default=10,
+        help="Start bytes of the experiment (default: 10)",
+    )
+    md_parser.add_argument(
+        "--master-ip",
         type=str,
-        default="10.220.25.100",
+        required=True,
+        help="SSH host/IP for the current master device",
+    )
+    md_parser.add_argument(
+        "--slave-ip",
+        type=str,
+        required=True,
         help="SSH host/IP for the remote slave device",
     )
     md_parser.add_argument(
-        "--remote-dir",
+        "--slave-user",
         type=str,
-        default="C:/Users/a/Desktop/KDD2026/hermes",
-        help="Base directory path on the remote slave device",
+        required=True,
+        help="SSH username for the remote slave device",
     )
     md_parser.add_argument(
-        "--remote-os",
+        "--slave-dir",
         type=str,
-        choices=["windows", "linux"],
-        default="windows",
+        required=True,
+        help="Project directory path on the remote slave device",
+    )
+    md_parser.add_argument(
+        "--slave-os",
+        type=str,
+        choices=["Windows", "Linux"],
+        required=True,
         help="OS type of the remote slave device",
     )
     md_parser.add_argument(

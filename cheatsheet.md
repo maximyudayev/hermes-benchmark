@@ -1,0 +1,120 @@
+## NTP Synchronization
+
+### Force sync
+`w32tm /resync` - the Windows Time Service
+`chronyc makestep` - Linux chrony
+
+### Save and apply registry configs
+`w32tm /config /update`
+`w32tm /resync /force /nowait`
+
+### (Linux) Manually set the date and time (YYYY-MM-DD HH:MM:SS)
+`sudo timedatectl set-time '2026-04-10 10:15:00'`
+`sudo date -s "10 APR 2026 10:15:00"`
+
+### Manually set the local NTP server address of the 68 Class C private IP subnet
+`w32tm /config /manualpeerlist:"192.168.68.100,0x9" /syncfromflags:manual /reliable:YES /update`
+
+### Manually set the local NTP server address of the 220.25 Class A private IP subnet
+`w32tm /config /manualpeerlist:"10.220.25.99,0x9" /syncfromflags:manual /reliable:YES /update`
+
+### Verify configuration
+`w32tm /query /configuration` - Windows
+`timedatectl` - Linux
+
+### Check the NTP peer list
+`w32tm /query /peers` - Windows
+`chronyc sources -v` - Linux
+
+### Track the synchronization between devices
+`chronyc tracking` - Linux
+
+### Restart time service
+`net stop w32time && net start w32time`
+`sudo systemctl restart chrony`
+
+### Windows Time Service manipulation
+#### Export registry settings for NTP 
+`reg export "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\W32Time" w32time_backup.reg`
+
+#### Import registry settings
+`reg import w32time_backup.reg`
+
+### Launch a background sync logging process
+#### PowerShell (Windows)
+`Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine = 'cmd.exe /c w32tm /stripchart /computer:10.220.25.99 /samples:720 /period:5 /dataonly > C:\Path\To\Your\Directory\ntp_sync_1hr.log'}`
+
+#### Command Prompt (Windows)
+`wmic process call create "cmd.exe /c w32tm /stripchart /computer:10.220.25.99 /samples:720 /period:5 /dataonly > C:\Path\To\Your\Directory\ntp_sync_1hr.log"`
+
+#### Bash (Linux)
+Launch over SSH a background process that persists even on tunnel disconnection.
+`nohup bash -c 'for i in {1..720}; do echo "=== $(date +"%Y-%m-%d %H:%M:%S") ===" >> ntp_sync_1hr.log; chronyc tracking >> ntp_sync_1hr.log; echo "" >> ntp_sync_1hr.log; sleep 5; done' > /dev/null 2>&1 &`
+
+Parse the log file for analysis and plotting.
+`echo "\n\n\n" > ntp_parsed.log; awk '/===/ { ts = $2 " " $3 } /System time/ { print ts ", " $4 "s" }' ntp_sync_1hr.log >> ntp_parsed.log`
+
+## Python Packaging
+Update the changelog since previous tag
+`git-changelog --bump <new_pypi_version> --filter-commits <previous_tag>..`
+
+Update the changelog since previous tag, summarize all commit categories
+`git-changelog --bump <new_pypi_version> --filter-commits <previous_tag>.. -c angular -s :all:`
+
+Update the changelog with all commit categories
+`git-changelog --bump <new_pypi_version> -c angular -s :all:`
+
+Update the version of the Python package for release
+`uv version --bump <[major,minor,patch]> [--dry-run] [--no-sync]`
+
+Build the Python package
+`uv build`
+
+Release the Python package on PyPi
+`uv publish --token <pypi_token>`
+
+## Secure Version Control with Multiple Users
+1. Create an SSH key for a user on the target shared device (e.g Jetson, Raspberry Pi), securing it with a password only you know.
+`ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_gh_<new_user>`
+1. Upload the `~/.ssh/id_ed25519_gh_<new_user>.pub` public SSH key to your GitHub account, and give it a clear name.
+1. On the target shared device, reference your unique key in the shared project domain inside the `~/.ssh/config` Git SSH config file, so that the SSH agent iterates over the other user's keys and prompts you to securely authenticate yours:
+    ```
+    Host <project_name>
+        HostName github.com
+        IdentityFile ~/.ssh/id_ed25519_gh_<userA>
+        IdentityFile ~/.ssh/id_ed25519_gh_<userB>
+        IdentityFile ~/.ssh/id_ed25519_gh_<new_user>
+        User git
+    ```
+1. Change the push URL of the remote repo to use SSH-based authentication (or push AND pull, for non-public remote repos), using your unique identifiable domain:
+`git remote set-url --push origin git@<project_name>:username/reponame.git` (e.g. `git@revalexo:kuleuven-emedia/revalexo.git`, for domain project name `revalexo`).
+1. Push to the repo. The SSH agent will iterate through the identity files, prompting you for the password of each, until all files were unsuccessfully tried or until one of the SSH keys were unlocked.
+
+## HERMES Data Recovery
+Dump the video into a new container, when device or experiment crashed, to recover playable video
+`ffmpeg -i corrupted_video.mp4 -c copy fixed_video.mp4`
+
+## ManGo iRODS
+`for n in $(iron ls <mango_path> --columns name | sed 's/\x1b\[[0-9;]*m//g' | tail -n +2); do iron download <mango_path>/$n $n; done`
+
+`echo $FILE | awk -F'_' '{print $2"_"$3"_"$4"/"$5"/"tolower($6)"/"$2"_"$3"_"$4"_"tolower($6)"_glasses.hdf5"}'`
+
+`iron ls /gbiomed/home/AID-FOG/KUL/upload/to_review --columns name | awk '/glasses/' | awk -F'_' '{print $2"_"$3"_"$4"/"$5"/"tolower($6)"/"$2"_"$3"_"$4"_"tolower($6)"_glasses_temp.hdf5"}'`
+
+`for n in $(iron ls /gbiomed/home/AID-FOG/KUL/upload/to_review --columns name | awk '/glasses/' | sed 's/\x1b\[[0-9;]*m//g'); do echo /gbiomed/home/AID-FOG/KUL/upload/to_review/$n && echo $(echo $n | awk -F'_' '{print $2"_"$3"_"$4"/"$5"/"tolower($6)"/"$2"_"$3"_"$4"_"tolower($6)"_glasses_temp.hdf5"}'); done`
+
+## FFmpeg
+List available devices:
+`ffmpeg -list_devices true -f dshow -i dummy` (Windows)
+`ffmpeg -f avfoundation -list_devices true -i ""` (macOS)
+`pactl list short sources` or `arecord -l` (Linux)
+
+Check the working settings of a detected device:
+`ffmpeg -list_options true -f dshow -i audio="Microphone (Realtek(R) Audio)"` (Windows)
+`ffmpeg -list_options true -f avfoundation -i ":default"` (macOS)
+`ffmpeg -list_options true -f [alsa|pulse] -i "hw:0,0"` (Linux)
+
+Test record a local device with those settings:
+`ffmpeg -f dshow -i audio="Microphone (Realtek(R) Audio)" -t 10 -ar 48000 -ac 1 -c:a pcm_s16le test_output.wav` (Windows)
+`ffmpeg -f avfoundation -i ":default" -t 10 -ar 48000 -ac 1 -c:a pcm_s16le test_output.wav` (macOS)
+`ffmpeg -f alsa -i hw:0,0 -t 10 -ar 48000 -ac 1 -c:a pcm_s16le test_output.wav` or `ffmpeg -f pulse -i default -t 10 -ar 48000 -ac 1 -c:a pcm_s16le test_output.wav` (Linux)

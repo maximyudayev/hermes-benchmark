@@ -1,0 +1,23 @@
+# Temporary/generated files
+###################################
+__pycache__
+*.pyc
+*.asv
+.antigravityignore
+
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.json
+
+# Virtual environments
+.venv*/
+
+# Recorded data
+data/
+temp/
+out/
+
+# Distribution files
+dist/
+*.egg-info/
+build/

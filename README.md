@@ -34,11 +34,11 @@ Make a copy of the `examples/video_codec_<type>.yml`, that matches your video en
 ## Running
 
 ### Communication Latency
-1. On each host device, run the latency evaluation automated script under `latency/`:
+1. On each host device, run the latency evaluation using the Python runner under `latency/`:
    ```bash
-   cd test
+   cd latency
+   python run_benchmark.py localhost
    ```
-   as `test_latency_localhost.bat` for Windows or `. test_latency_localhost.sh` for Linux.
 1. Gather generated CSV files from all tested devices and place in `data/latency/localhost/<device_name>` subfolders in the following structure. The folder name will be used as the trace name of the corresponding series on the generated plot.
    ```bash
    root/
@@ -56,7 +56,11 @@ Make a copy of the `examples/video_codec_<type>.yml`, that matches your video en
            └───multi_device/
    ```
 1. Invert the directory structure for batch visualization by running `python utils\invert_latency_subfolders.py` for Windows or `python utils/invert_latency_subfolders.py` for Linux.
-1. Visualize latencies by running `plot_latency.bat .\data\latency\localhost_inverted` for Windows or `. plot_latency.sh ./data/latency/localhost_inverted` for Linux. It will generate latencies for each device ran on the shared set of experimental parameters:
+1. Visualize latencies by running the plot command:
+   ```bash
+   python run_benchmark.py plot ./data/latency/localhost_inverted
+   ```
+   It will generate latencies for each device ran on the shared set of experimental parameters:
 
 <p align="center">
   <img src="images/latency_intra_freq.png" alt="Intra-device latency vs sampling frequency for 1kB messages" width="45%" />

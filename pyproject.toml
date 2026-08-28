@@ -29,6 +29,7 @@ dependencies = [
   "matplotlib",
   "scipy",
   "pillow",
+  "tqdm",
 ]
 
 [tool.uv.sources]

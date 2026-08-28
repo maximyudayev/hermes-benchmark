@@ -3,10 +3,10 @@
 """
 Usage:
     Localhost:
-        python run_benchmark.py localhost -d 30 -r 2000 -b 100000000 --dry-run
+        python run_benchmark.py localhost --device laptop -d 30 -r 2000 -b 100000000 --dry-run
     Multi-device:
-        python run_benchmark.py multi-device -d 30 -r 2000 -b 100000000 --master-ip 192.168.0.190 --slave-ip 192.168.0.130 --slave-user jetson --slave-dir ~/Documents/hermes-benchmark --slave-os Linux --dry-run
-        python run_benchmark.py multi-device -d 30 -r 2000 -b 100000000 --master-ip 192.168.0.190 --slave-ip 192.168.0.146 --slave-user Owner --slave-dir D:\\hermes-benchmark --slave-os Windows --dry-run
+        python run_benchmark.py multi-device --device laptop -d 30 -r 2000 -b 100000000 --master-ip 192.168.0.190 --slave-ip 192.168.0.130 --slave-user jetson --slave-dir ~/Documents/hermes-benchmark --slave-os Linux --dry-run
+        python run_benchmark.py multi-device --device laptop -d 30 -r 2000 -b 100000000 --master-ip 192.168.0.190 --slave-ip 192.168.0.146 --slave-user Owner --slave-dir D:\\hermes-benchmark --slave-os Windows --dry-run
 """
 
 import os
@@ -68,7 +68,7 @@ def handle_localhost(args):
     start_byte = args.start_byte
 
     # Grid sweep
-    memory_limit = 5*2**30 # 5 GB
+    memory_limit = args.mem * 2**30 # 5 GB
     flush_period_s = 10
     rates_grid = [
         1,
@@ -116,7 +116,7 @@ def handle_localhost(args):
 
     print("\n=== Starting Localhost Message vs Frequency Sweep of Latency ===")
     total_experiments = len(bytes_grid) * len(rates_grid)
-    output_path = Path("data/latency/localhost")
+    output_path = Path("data/localhost") / args.device
     for b in bytes_grid:
         for r in rates_grid:
             counter += 1
@@ -176,7 +176,7 @@ def handle_multi_device(args):
     start_byte = args.start_byte
 
     # Grid sweep
-    memory_limit = 5*2**30 # 5 GB
+    memory_limit = args.mem * 2**30 # 5 GB
     flush_period_s = 10
     rates_grid = [
         1,
@@ -224,7 +224,7 @@ def handle_multi_device(args):
 
     print("\n=== Starting Multi-Device Message vs Frequency Sweep of Latency ===")
     total_experiments = len(bytes_grid) * len(rates_grid)
-    output_path = Path("data/latency/multi_device")
+    output_path = Path("data/multi_device") / args.device
 
     for b in bytes_grid:
         for r in rates_grid:
@@ -256,12 +256,6 @@ def handle_multi_device(args):
             env["HERMES_EXP_RATE"] = str(r)
             env["HERMES_EXP_BUF_LEN"] = str(flush_period_s * r * 2)
 
-            remote_path = f"{slave_dir}/data/latency/multi_device/run_latency_vs_frequency/trial_{counter}"
-            local_path = (
-                Path("data/latency/multi_device/run_latency_vs_frequency")
-                / f"trial_{counter}"
-            )
-
             # Inject envs
             inject_cmd = [
                 sys.executable,
@@ -280,7 +274,7 @@ def handle_multi_device(args):
             cmd = [
                 hermes_cli,
                 "-o",
-                "data/latency/multi_device",
+                str(output_path),
                 "-d",
                 str(duration),
                 "--experiment",
@@ -332,6 +326,15 @@ def main():
         type=int,
         default=10,
         help="Start bytes of the experiment (default: 10)",
+    )
+    lh_parser.add_argument(
+        "--device", type=str, required=True, help="Name of the device under test"
+    )
+    lh_parser.add_argument(
+        "--mem",
+        type=int,
+        default=5,
+        help="Memory limit for the experiment (in GB)"
     )
     lh_parser.add_argument(
         "--dry-run", action="store_true", help="Print commands without executing them"
@@ -397,6 +400,15 @@ def main():
         choices=["Windows", "Linux"],
         required=True,
         help="OS type of the remote slave device",
+    )
+    md_parser.add_argument(
+        "--device", type=str, required=True, help="Name of the device under test"
+    )
+    md_parser.add_argument(
+        "--mem",
+        type=int,
+        default=5,
+        help="Memory limit for the experiment (in GB)"
     )
     md_parser.add_argument(
         "--dry-run", action="store_true", help="Print commands without executing them"

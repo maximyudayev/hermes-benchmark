@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     with open(output_path / "latency.csv", "w") as f:
         if f.tell() == 0:
-            f.write("bytes,freq,mean,std,min,max,p50,p90,p95,p99\n")
+            f.write("bytes,freq,send_freq,mean,std,min,max,p50,p90,p95,p99\n")
 
         for bytes_folder in sorted([x for x in output_path.iterdir() if x.is_dir()], key=lambda x: int(x.name.split("_")[1])):
             for rate_folder in sorted([x for x in bytes_folder.iterdir() if x.is_dir()], key=lambda x: int(x.name.split("_")[1])):
@@ -43,11 +43,15 @@ if __name__ == "__main__":
                     dataset_name="probe/rtt",
                 )
 
+                send_time_s = toas - rtts
+                rate_actual = np.polyfit(send_time_s.flatten(), sequences.flatten(), 1)[0]
+
                 lat = (rtts / 2) * 1e3  # convert to ms
                 p50, p90, p95, p99 = np.percentile(lat, [50, 90, 95, 99])
                 f.write(
                     f"{bytes_folder.name.split('_')[1]},"
                     f"{rate_folder.name.split('_')[1]},"
+                    f"{rate_actual:.2f},"
                     f"{np.mean(lat)},"
                     f"{np.std(lat)},"
                     f"{np.min(lat)},"

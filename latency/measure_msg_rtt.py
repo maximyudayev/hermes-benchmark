@@ -3,10 +3,10 @@
 """
 Usage:
     Localhost:
-        python run_benchmark.py localhost --device laptop -d 30 -r 2000 -b 100000000 --dry-run
+        python measure_rtt.py localhost --device laptop --mem 5 -d 60 -r 2000 -b 100000000 --dry-run
     Multi-device:
-        python run_benchmark.py multi-device --device laptop -d 30 -r 2000 -b 100000000 --master-ip 192.168.0.190 --slave-ip 192.168.0.130 --slave-user jetson --slave-dir ~/Documents/hermes-benchmark --slave-os Linux --dry-run
-        python run_benchmark.py multi-device --device laptop -d 30 -r 2000 -b 100000000 --master-ip 192.168.0.190 --slave-ip 192.168.0.146 --slave-user Owner --slave-dir D:\\hermes-benchmark --slave-os Windows --dry-run
+        python measure_rtt.py multi-device --device laptop --mem 5 -d 60 -r 2000 -b 100000000 --master-ip 192.168.0.190 --slave-ip 192.168.0.130 --slave-user jetson --slave-dir ~/Documents/hermes-benchmark --slave-os Linux --dry-run
+        python measure_rtt.py multi-device --device laptop --mem 5 -d 60 -r 2000 -b 100000000 --master-ip 192.168.0.190 --slave-ip 192.168.0.146 --slave-user Owner --slave-dir D:\\hermes-benchmark --slave-os Windows --dry-run
 """
 
 import os

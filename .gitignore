@@ -11,12 +11,13 @@ __pycache__
 
 # Virtual environments
 .venv*/
+dataset/
 
 # Recorded data
 data/
+*.csv
 temp/
 out/
-*.csv
 
 # Distribution files
 dist/

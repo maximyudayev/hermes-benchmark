@@ -5,12 +5,23 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File with Arguments",
+            "name": "Plot cueing",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "realtime_ai/plot_cueing.py",
             "console": "integratedTerminal",
-            "args": "${command:pickArgs}"
+            "args": [
+                "realtime_ai/dataset/fog/mic.wav",
+                "realtime_ai/dataset/fog/cue.opus",
+                "realtime_ai/dataset/fog/mic.hdf5",
+                "realtime_ai/dataset/fog/imu_replay.hdf5",
+                "realtime_ai/dataset/fog/ai_fog.hdf5",
+                "realtime_ai/dataset/fog/buds.hdf5",
+                "--out-dir",
+                "realtime_ai/dataset/fog",
+                "--zoom-cue",
+                "17",
+            ],
         },
         {
             "name": "Python Debugger: Current File",

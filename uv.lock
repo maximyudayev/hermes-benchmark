@@ -1226,7 +1226,7 @@ requires-dist = [
     { name = "pillow" },
     { name = "pysio-hermes", git = "https://github.com/maximyudayev/hermes.git" },
     { name = "scipy" },
-    { name = "tqdm", specifier = ">=4.68.2" },
+    { name = "tqdm" },
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 import time
 import numpy as np
 
-from . import DataComponent, VideoComponent
+from .components import DataComponent, VideoComponent
 from .types import AlignmentInfo
 
 

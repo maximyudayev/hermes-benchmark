@@ -3,8 +3,8 @@ import numpy as np
 import ffmpeg
 import h5py
 
-from components import DataComponent
-from components.types import VideoComponentInfo
+from . import DataComponent
+from ..types import VideoComponentInfo
 
 
 class VideoComponent(DataComponent):

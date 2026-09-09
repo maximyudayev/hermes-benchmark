@@ -3,13 +3,13 @@ import io
 import sys
 from pathlib import Path
 import time
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.ticker import FuncFormatter
 from matplotlib.transforms import (
     Bbox,
     TransformedBbox,
-    blended_transform_factory,
 )
 from mpl_toolkits.axes_grid1.inset_locator import (
     BboxConnector,
@@ -19,12 +19,13 @@ from mpl_toolkits.axes_grid1.inset_locator import (
 import numpy as np
 from PIL import Image
 
+matplotlib.rcParams['svg.fonttype'] = 'none'
 # Add the parent directory ('urils') to the Python path
 # to allow for absolute imports of the 'components' package.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from components.sync_utils import add_alignment_info, extract_refticks_from_cameras
-from components import (
+from utils.sync_utils import add_alignment_info, extract_refticks_from_cameras
+from utils.components import (
     DataComponent,
     ExoImuComponent,
     MotorComponent,
@@ -280,6 +281,12 @@ if __name__ == "__main__":
         required=True,
         help="Offset for initial alignment to counter internal delay of the corresponding system. Can be specified multiple times.",
     )
+    parser.add_argument(
+        "--out-file",
+        type=str,
+        required=True,
+        help="Path to the output generated snapshot.",
+    )
 
     args = parser.parse_args()
 
@@ -440,6 +447,9 @@ if __name__ == "__main__":
         motor_data,
         label="Right hip motor",
         color="tab:blue",
+        linewidth=0.80,
+        alpha=0.75,
+        zorder=2,
     )
     ax_main.set_xlim(0, duration)
     ax_main.set_xlabel("Time since start (mm:ss)")
@@ -451,6 +461,9 @@ if __name__ == "__main__":
         imu_data[:, 0],
         label="Right thigh IMU",
         color="tab:orange",
+        linewidth=0.80,
+        alpha=0.70,
+        zorder=2,
     )
     ax_main_2.set_ylabel("IMU angle (degrees)", color="tab:orange")
     ax_main_2.tick_params(axis="y", labelcolor="tab:orange")
@@ -527,5 +540,4 @@ if __name__ == "__main__":
     plt.subplots_adjust(
         left=0.05, right=0.955, top=0.92, bottom=0.05, wspace=0.02, hspace=0.2
     )
-    plt.show()
-    print("Done.")
+    plt.savefig(Path(args.out_file))

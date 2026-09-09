@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 
-from .types import AlignmentInfo
+from ..types import AlignmentInfo
 
 
 class DataComponent(ABC):

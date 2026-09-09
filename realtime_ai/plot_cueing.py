@@ -3,9 +3,8 @@ from pathlib import Path
 import ffmpeg
 import h5py
 import matplotlib
-from matplotlib.ticker import FuncFormatter, MultipleLocator
+from matplotlib.ticker import MultipleLocator
 import numpy as np
-import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from scipy import signal
 

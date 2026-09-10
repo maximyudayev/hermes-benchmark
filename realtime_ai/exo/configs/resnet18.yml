@@ -1,0 +1,34 @@
+# ResNet-18 — Image only (single frame from video)
+
+prediction_horizons: [0, 0.1, 0.2, 0.3, 0.5, 1]
+window_size: 2.0
+
+checkpoint: "../weights/resnet18_4subj.pt"
+
+modalities:
+  image:
+    receptive_field: 1
+    eval_transforms:
+      - name: "DivideBy255"
+        params: {}
+      - name: "NormalizeImage"
+        params:
+          mean: [0.485, 0.456, 0.406]
+          std: [0.229, 0.224, 0.225]
+      # Square preprocessing: center-crop to largest square (720x720 for 720p
+      # frames), then resize directly to 224x224. Preserves a wider FoV than
+      # the original resize-256 + center-crop-224 chain — empirically better
+      # on the live smartglasses camera.
+      - name: "CenterSquareCrop"
+        params: {}
+      - name: "ResizeImage"
+        params:
+          size: 224
+
+models:
+  image:
+    name: "ResNet18_Image"
+    params:
+      pretrained: true
+      freeze_backbone: false
+      freeze_early_layers: false

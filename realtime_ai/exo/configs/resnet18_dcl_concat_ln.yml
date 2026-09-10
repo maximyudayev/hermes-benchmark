@@ -1,0 +1,67 @@
+# ResNet-18 + DCL with concat + LayerNorm fusion (Image + IMU)
+
+prediction_horizons: [0, 0.1, 0.2, 0.3, 0.5, 1]
+window_size: 2.0
+
+checkpoint: "../weights/resnet18_dcl_concat_ln_4subj.pt"
+
+modalities:
+  raw_imu:
+    receptive_field: 120
+    column_patterns:
+      - "acc_Pelvis_*"
+      - "acc_*_Upper_Leg_*"
+      - "acc_*_Lower_Leg_*"
+      - "acc_*_Foot_*"
+      - "gyro_Pelvis_*"
+      - "gyro_*_Upper_Leg_*"
+      - "gyro_*_Lower_Leg_*"
+      - "gyro_*_Foot_*"
+    eval_transforms: []
+
+  image:
+    receptive_field: 1
+    eval_transforms:
+      - name: "DivideBy255"
+        params: {}
+      - name: "NormalizeImage"
+        params:
+          mean: [0.485, 0.456, 0.406]
+          std: [0.229, 0.224, 0.225]
+      # Square preprocessing: center-crop to largest square (720x720 for 720p
+      # frames), then resize directly to 224x224. Preserves a wider FoV than
+      # the original resize-256 + center-crop-224 chain — empirically better
+      # on the live smartglasses camera.
+      - name: "CenterSquareCrop"
+        params: {}
+      - name: "ResizeImage"
+        params:
+          size: 224
+
+models:
+  raw_imu:
+    name: "DeepConvLSTM"
+    params:
+      channels: 42
+      window_size: 120
+      conv_kernels: 64
+      conv_kernel_size: 11
+      lstm_units: 1024
+      lstm_layers: 1
+      dropout: 0.5
+      feature_dim: 256
+
+  image:
+    name: "ResNet18_Image"
+    params:
+      pretrained: true
+      freeze_backbone: false
+      freeze_early_layers: false
+      feature_dim: 256
+
+  fusion:
+    name: "FusionModel"
+    params:
+      fusion_method: "concat_layernorm"
+      hidden_dim: 512
+      dropout: 0.5

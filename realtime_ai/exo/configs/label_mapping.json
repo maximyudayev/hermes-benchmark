@@ -1,0 +1,28 @@
+{
+  "idx_to_label": {
+    "0": "Level ground walking",
+    "1": "Sit to stand",
+    "2": "Stand to sit",
+    "3": "Sitting",
+    "4": "Stair up",
+    "5": "Stair down",
+    "6": "Ramp up",
+    "7": "Ramp down",
+    "8": "Grass walking",
+    "9": "Uneven ground walking",
+    "10": "Carry"
+  },
+  "label_to_idx": {
+    "Level ground walking": 0,
+    "Sit to stand": 1,
+    "Stand to sit": 2,
+    "Sitting": 3,
+    "Stair up": 4,
+    "Stair down": 5,
+    "Ramp up": 6,
+    "Ramp down": 7,
+    "Grass walking": 8,
+    "Uneven ground walking": 9,
+    "Carry": 10
+  }
+}

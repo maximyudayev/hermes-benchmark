@@ -118,3 +118,6 @@ Test record a local device with those settings:
 `ffmpeg -f dshow -i audio="Microphone (Realtek(R) Audio)" -t 10 -ar 48000 -ac 1 -c:a pcm_s16le test_output.wav` (Windows)
 `ffmpeg -f avfoundation -i ":default" -t 10 -ar 48000 -ac 1 -c:a pcm_s16le test_output.wav` (macOS)
 `ffmpeg -f alsa -i hw:0,0 -t 10 -ar 48000 -ac 1 -c:a pcm_s16le test_output.wav` or `ffmpeg -f pulse -i default -t 10 -ar 48000 -ac 1 -c:a pcm_s16le test_output.wav` (Linux)
+
+Overlay video with frame number
+`ffmpeg -i input.mkv -vf "drawtext=text='%{n}':x=10:y=10:fontcolor=white:fontsize=24:box=1:boxcolor=black@0.5" -c:a copy output.mkv`

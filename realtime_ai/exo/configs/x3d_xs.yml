@@ -1,0 +1,31 @@
+# X3D-XS — Video only
+
+prediction_horizons: [0, 0.1, 0.2, 0.3, 0.5, 1]
+window_size: 2.0
+
+checkpoint: "../weights/x3d_xs.pt"
+
+modalities:
+  video:
+    receptive_field: 4
+    stride: 15
+    eval_transforms:
+      - name: "DivideBy255"
+        params: {}
+      - name: "NormalizeVideo"
+        params:
+          mean: [0.45, 0.45, 0.45]
+          std: [0.225, 0.225, 0.225]
+      - name: "ShortSideScale"
+        params:
+          size: 182
+      - name: "CenterCropVideo"
+        params:
+          crop_size: [182, 182]
+
+models:
+  video:
+    name: "X3D_Video"
+    params:
+      pretrained: false
+      model_size: "xs"

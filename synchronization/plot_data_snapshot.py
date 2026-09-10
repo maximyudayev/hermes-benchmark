@@ -22,10 +22,10 @@ from PIL import Image
 matplotlib.rcParams['svg.fonttype'] = 'none'
 # Add the parent directory ('urils') to the Python path
 # to allow for absolute imports of the 'components' package.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from utils.sync_utils import add_alignment_info, extract_refticks_from_cameras
-from utils.components import (
+from synchronization.utils.sync_utils import add_alignment_info, extract_refticks_from_cameras
+from synchronization.utils.components import (
     DataComponent,
     ExoImuComponent,
     MotorComponent,

@@ -18,6 +18,8 @@ data/
 *.csv
 temp/
 out/
+*.pt
+*.svg
 
 # Distribution files
 dist/

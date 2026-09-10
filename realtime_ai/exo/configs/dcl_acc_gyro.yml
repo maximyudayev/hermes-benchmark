@@ -1,0 +1,34 @@
+# DCL (DeepConvLSTM) with accelerometer + gyroscope — IMU only
+
+prediction_horizons: [0, 0.1, 0.2, 0.3, 0.5, 1]
+window_size: 2.0
+
+checkpoint: "../weights/dcl_acc_gyro_4subj.pt"
+
+modalities:
+  raw_imu:
+    receptive_field: 120
+    column_patterns:
+      # Lower body accelerometer channels
+      - "acc_Pelvis_*"
+      - "acc_*_Upper_Leg_*"
+      - "acc_*_Lower_Leg_*"
+      - "acc_*_Foot_*"
+      # Lower body gyroscope channels
+      - "gyro_Pelvis_*"
+      - "gyro_*_Upper_Leg_*"
+      - "gyro_*_Lower_Leg_*"
+      - "gyro_*_Foot_*"
+    eval_transforms: []
+
+models:
+  raw_imu:
+    name: "DeepConvLSTM"
+    params:
+      channels: 42
+      window_size: 120
+      conv_kernels: 64
+      conv_kernel_size: 11
+      lstm_units: 1024
+      lstm_layers: 1
+      dropout: 0.5

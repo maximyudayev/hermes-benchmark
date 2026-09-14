@@ -65,16 +65,19 @@ def _labels_to_colors(labels):
     return np.array([_hex_to_rgb(LABEL_COLORS[l]) for l in labels])
 
 
-def _draw_ribbon(ax, time, labels):
+def _draw_ribbon(ax, time, labels, alphas=None):
     colors = _labels_to_colors(labels)
+    if alphas is not None:
+        alphas = np.asarray(alphas, dtype=np.float32).reshape(-1, 1)
+        colors = np.concatenate([colors, alphas], axis=-1)
     ribbon = colors[np.newaxis, :, :]
+    dt = (time.iloc[-1] - time.iloc[0]) / max(len(time) - 1, 1) if len(time) > 1 else 0.03
     ax.imshow(
         ribbon,
         aspect="auto",
         interpolation="nearest",
-        extent=[time.iloc[0], time.iloc[-1], 0, 1],
+        extent=[time.iloc[0], time.iloc[-1] + dt, 0, 1],
     )
-    ax.set_xlim(time.iloc[0], time.iloc[-1])
     ax.set_yticks([])
     ax.tick_params(bottom=False, labelbottom=False)
 
@@ -85,6 +88,108 @@ def _legend_handles(present):
         for l in LABEL_COLORS
         if l in present
     ]
+
+
+def get_temporal_segments(classes, seg_times, dt_step):
+    """Extract continuous temporal activity segments from a sequence of labels and timestamps."""
+    segments = []
+    if len(classes) == 0:
+        return segments
+    curr_c = classes[0]
+    start_t = seg_times[0]
+    last_t = seg_times[0]
+    for c, t in zip(classes[1:], seg_times[1:]):
+        if c != curr_c:
+            if curr_c != "Unknown":
+                segments.append({"class": curr_c, "start": start_t, "end": last_t + dt_step})
+            curr_c = c
+            start_t = t
+        last_t = t
+    if curr_c != "Unknown":
+        segments.append({"class": curr_c, "start": start_t, "end": last_t + dt_step})
+    return segments
+
+
+def calculate_iou(seg1, seg2):
+    """Compute temporal Intersection-over-Union between two segments."""
+    start = max(seg1["start"], seg2["start"])
+    end = min(seg1["end"], seg2["end"])
+    intersection = max(0, end - start)
+    union = max(seg1["end"], seg2["end"]) - min(seg1["start"], seg2["start"])
+    if union <= 0:
+        return 0.0
+    return intersection / union
+
+
+def match_segments_at_k(t_segs, p_segs, k):
+    """Greedy segment matching sorted by descending IoU overlap."""
+    matches = []
+    for i, t_seg in enumerate(t_segs):
+        for j, p_seg in enumerate(p_segs):
+            if t_seg["class"] == p_seg["class"]:
+                iou = calculate_iou(t_seg, p_seg)
+                if iou >= k:
+                    matches.append((iou, i, j))
+    matches.sort(key=lambda x: x[0], reverse=True)
+    matched_true = set()
+    matched_pred = set()
+    tp = 0
+    for iou, i, j in matches:
+        if i not in matched_true and j not in matched_pred:
+            tp += 1
+            matched_true.add(i)
+            matched_pred.add(j)
+    return tp, matched_true, matched_pred, matches
+
+
+def align_and_extract_segments(h_df: pd.DataFrame, h: float):
+    """Align predictions for horizon h with ground truth at target time (t + h),
+
+    mask predictions falling inside 'Unknown' regions, and extract
+    continuous true and predicted segments.
+
+    Returns:
+        (true_segments, pred_segments, aligned_df, dt)
+    """
+    times = h_df["window_end_relative_s"].values
+    dt = float(np.median(np.diff(times))) if len(times) > 1 else 0.03
+    if dt <= 0:
+        dt = 0.03
+
+    gt_df = h_df[["window_end_relative_s", "true_class"]].rename(
+        columns={"true_class": "true_class_at_target"}
+    )
+    pred_df = pd.DataFrame({
+        "window_end_relative_s": h_df["window_end_relative_s"],
+        "target_time_s": h_df["window_end_relative_s"] + h,
+        "predicted_class": h_df["predicted_class"],
+    })
+    aligned = pd.merge_asof(
+        pred_df.sort_values("target_time_s"),
+        gt_df,
+        left_on="target_time_s",
+        right_on="window_end_relative_s",
+        direction="nearest",
+        tolerance=dt * 1.5,
+        suffixes=("", "_gt"),
+    )
+    aligned["true_class_at_target"] = aligned["true_class_at_target"].fillna("Unknown")
+
+    true_segments = get_temporal_segments(
+        h_df["true_class"].tolist(),
+        h_df["window_end_relative_s"].tolist(),
+        dt,
+    )
+    masked_preds = [
+        p if gt != "Unknown" else "Unknown"
+        for p, gt in zip(aligned["predicted_class"], aligned["true_class_at_target"])
+    ]
+    pred_segments = get_temporal_segments(
+        masked_preds,
+        aligned["target_time_s"].tolist(),
+        dt,
+    )
+    return true_segments, pred_segments, aligned, dt
 
 
 def fill_annotations_from_csv(df: pd.DataFrame, annoations_path: str) -> pd.DataFrame:
@@ -125,13 +230,13 @@ def plot_all_horizons(df, save_path, title=""):
         .reset_index(drop=True)
     )
     gt_time = gt_df["window_end_relative_s"]
+    dt = (gt_time.iloc[-1] - gt_time.iloc[0]) / max(len(gt_time) - 1, 1) if len(gt_time) > 1 else 0.03
     t_start = gt_time.iloc[0]
-    t_end = gt_time.iloc[-1] + max(horizons)
+    t_end = gt_time.iloc[-1] + max(horizons) + dt
     present = set(gt_df["true_class"].unique())
 
     ax_gt = fig.add_subplot(gs[0, 0])
     _draw_ribbon(ax_gt, gt_time, gt_df["true_class"])
-    ax_gt.set_xlim(t_start, t_end)
     ax_gt.set_ylabel("GT", fontsize=12, rotation=0, labelpad=25, va="center")
 
     last_ax = ax_gt
@@ -152,8 +257,110 @@ def plot_all_horizons(df, save_path, title=""):
     last_ax.tick_params(bottom=True, labelbottom=True)
     last_ax.set_xlabel("Time (s)", fontsize=12)
 
+    # Set the global shared x-axis limits once across all subplots
+    ax_gt.set_xlim(t_start, t_end)
+
     if title:
         ax_gt.set_title(title, fontsize=14, loc="left", pad=4)
+
+    ax_legend = fig.add_subplot(gs[:, 1])
+    ax_legend.axis("off")
+    ax_legend.legend(
+        handles=_legend_handles(present),
+        loc="center left",
+        fontsize=10,
+        frameon=False,
+        handlelength=1.2,
+        handleheight=1.0,
+        labelspacing=0.4,
+    )
+
+    fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved: {save_path}")
+
+
+def plot_f1_matched_horizons(
+    df: pd.DataFrame,
+    save_path: str,
+    k: float = 0.25,
+    title: str = "",
+    alpha_unmatched: float = 0.5,
+):
+    """Plot segmentation ribbons highlighting True Positive (TP) predicted segments
+
+    in full saturation (100% opacity) and non-matched / false-positive segments
+    with reduced opacity (default 30%).
+
+    Args:
+        df (pd.DataFrame): Predictions DataFrame.
+        save_path (str): File path to save the SVG.
+        k (float): IoU threshold for matching (default: 0.25).
+        title (str): Optional plot title.
+        alpha_unmatched (float): Opacity for unmatched / false-positive segments (default: 0.3).
+    """
+    horizons = sorted(df["horizon_s"].unique())
+    n_rows = 1 + len(horizons)
+    fig = plt.figure(figsize=(18, 0.65 * n_rows + 0.8))
+    gs = fig.add_gridspec(n_rows, 2, width_ratios=[1, 0.18], wspace=0.02, hspace=0.08)
+
+    gt_df = (
+        df[df["horizon_s"] == horizons[0]]
+        .sort_values("window_end_relative_s")
+        .reset_index(drop=True)
+    )
+    gt_time = gt_df["window_end_relative_s"]
+    dt = (gt_time.iloc[-1] - gt_time.iloc[0]) / max(len(gt_time) - 1, 1) if len(gt_time) > 1 else 0.03
+    t_start = gt_time.iloc[0]
+    t_end = gt_time.iloc[-1] + max(horizons) + dt
+    present = set(gt_df["true_class"].unique())
+
+    ax_gt = fig.add_subplot(gs[0, 0])
+    _draw_ribbon(ax_gt, gt_time, gt_df["true_class"])
+    ax_gt.set_ylabel("GT", fontsize=12, rotation=0, labelpad=25, va="center")
+
+    last_ax = ax_gt
+    for h_idx, h in enumerate(horizons):
+        h_df = (
+            df[df["horizon_s"] == h]
+            .sort_values("window_end_relative_s")
+            .reset_index(drop=True)
+        )
+
+        # 1. Reuse unified segment generation and matching logic
+        true_segments, pred_segments, aligned, _ = align_and_extract_segments(h_df, h)
+        tp, matched_true, matched_pred, matches = match_segments_at_k(true_segments, pred_segments, k)
+
+        # 2. Assign alpha: 1.0 for True Positive segments, alpha_unmatched for others
+        alphas = np.full(len(aligned), alpha_unmatched, dtype=np.float32)
+        for j in matched_pred:
+            p_seg = pred_segments[j]
+            mask = (aligned["target_time_s"] >= p_seg["start"] - 1e-5) & (aligned["target_time_s"] <= p_seg["end"] + 1e-5)
+            alphas[mask] = 1.0
+
+        present |= set(h_df["predicted_class"].unique())
+        ax = fig.add_subplot(gs[1 + h_idx, 0], sharex=ax_gt)
+        _draw_ribbon(ax, aligned["target_time_s"], aligned["predicted_class"], alphas=alphas)
+
+        fp = len(pred_segments) - tp
+        fn = len(true_segments) - tp
+        p = tp / (tp + fp) if (tp + fp) > 0 else 0
+        r = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1 = 2 * p * r / (p + r) if (p + r) > 0 else 0
+
+        ax.set_ylabel(f"+{h}s\n(F1={f1:.2f})", fontsize=10, rotation=0, labelpad=30, va="center")
+        if h_idx < len(horizons) - 1:
+            ax.tick_params(bottom=False, labelbottom=False)
+        last_ax = ax
+
+    last_ax.tick_params(bottom=True, labelbottom=True)
+    last_ax.set_xlabel("Time (s)", fontsize=12)
+
+    plot_title = title if title else f"F1@{k:.2f} Matches (TP = 100% saturation, FP = {int(alpha_unmatched * 100)}% opacity)"
+    ax_gt.set_title(plot_title, fontsize=14, loc="left", pad=4)
+
+    # Set the global shared x-axis limits once across all subplots
+    ax_gt.set_xlim(t_start, t_end)
 
     ax_legend = fig.add_subplot(gs[:, 1])
     ax_legend.axis("off")
@@ -191,7 +398,7 @@ def smooth_predictions(df: pd.DataFrame, window: int) -> pd.DataFrame:
     return pd.concat(parts, ignore_index=True)
 
 
-def plot_with_smoothed(df, output_dir, title="", smooth_window=5):
+def plot_with_smoothed(df, output_dir, title="", smooth_window=5, k=0.25):
     plot_all_horizons(df, os.path.join(output_dir, "all_horizons.svg"), title=title)
     plot_all_horizons(
         smooth_predictions(df, window=smooth_window),
@@ -199,6 +406,20 @@ def plot_with_smoothed(df, output_dir, title="", smooth_window=5):
         title=f"{title} (smooth={smooth_window})"
         if title
         else f"(smooth={smooth_window})",
+    )
+    plot_f1_matched_horizons(
+        df,
+        os.path.join(output_dir, "all_horizons_f1.svg"),
+        k=k,
+        title=f"{title} (F1@{k:.2f})" if title else f"F1@{k:.2f} Matches",
+    )
+    plot_f1_matched_horizons(
+        smooth_predictions(df, window=smooth_window),
+        os.path.join(output_dir, "all_horizons_smooth_f1.svg"),
+        k=k,
+        title=f"{title} (smooth={smooth_window}, F1@{k:.2f})"
+        if title
+        else f"(smooth={smooth_window}, F1@{k:.2f})",
     )
 
 
@@ -419,7 +640,8 @@ def build_model(config: Config, device: str | torch.device) -> Module:
 def calculate_kpis(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate sample-wise and segmental KPIs for temporal continuous predictions.
-    Computes: Accuracy, Macro F1, F1@{10, 25, 50}, Levenshtein Distance, and Detection Latency.
+    Computes: Accuracy, Macro F1, F1@{10, 25, 50}, Levenshtein Distance, Normalized Edit Score,
+    Detection Rate, Detection Latency, and Anticipation Latency.
     """
     results = []
     
@@ -434,42 +656,22 @@ def calculate_kpis(df: pd.DataFrame) -> pd.DataFrame:
         else:
             h_df = df.sort_values("window_end_relative_s").reset_index(drop=True)
             
-        valid_df = h_df[h_df["true_class"] != "Unknown"]
+        # 1. Reuse unified segment extraction and alignment
+        true_segments, pred_segments, aligned, dt = align_and_extract_segments(h_df, h)
+
+        # Frame-wise metrics (evaluate valid ground truth at target time)
+        valid_mask = (aligned["true_class_at_target"] != "Unknown") & aligned["true_class_at_target"].notna()
+        valid_df = aligned[valid_mask]
         if valid_df.empty:
             continue
-            
-        y_true = valid_df["true_class"].tolist()
+
+        y_true = valid_df["true_class_at_target"].tolist()
         y_pred = valid_df["predicted_class"].tolist()
-        
+
         acc = metrics.accuracy_score(y_true, y_pred)
         macro_f1 = metrics.f1_score(y_true, y_pred, average="macro", zero_division=0)
-        
-        # Segmental metrics
-        times = h_df["window_end_relative_s"].tolist()
-        all_true = h_df["true_class"].tolist()
-        all_pred = h_df["predicted_class"].tolist()
-        
-        def get_temporal_segments(classes, times):
-            segments = []
-            if len(classes) == 0:
-                return segments
-            curr_c = classes[0]
-            start_t = times[0]
-            last_t = times[0]
-            for c, t in zip(classes[1:], times[1:]):
-                if c != curr_c:
-                    if curr_c != "Unknown":
-                        segments.append({'class': curr_c, 'start': start_t, 'end': last_t})
-                    curr_c = c
-                    start_t = t
-                last_t = t
-            if curr_c != "Unknown":
-                segments.append({'class': curr_c, 'start': start_t, 'end': last_t})
-            return segments
-            
-        true_segments = get_temporal_segments(all_true, times)
-        pred_segments = get_temporal_segments(all_pred, times)
-        
+
+        # Levenshtein distance & normalized edit score
         def edit_distance(seq1, seq2):
             n, m = len(seq1), len(seq2)
             dp = [[0] * (m + 1) for _ in range(n + 1)]
@@ -482,36 +684,17 @@ def calculate_kpis(df: pd.DataFrame) -> pd.DataFrame:
                     else:
                         dp[i][j] = min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]) + 1
             return dp[n][m]
-            
-        true_seq = [s['class'] for s in true_segments]
-        pred_seq = [s['class'] for s in pred_segments]
+
+        true_seq = [s["class"] for s in true_segments]
+        pred_seq = [s["class"] for s in pred_segments]
         lev_dist = edit_distance(true_seq, pred_seq)
-        
-        def calculate_iou(seg1, seg2):
-            start = max(seg1['start'], seg2['start'])
-            end = min(seg1['end'], seg2['end'])
-            intersection = max(0, end - start)
-            union = max(seg1['end'], seg2['end']) - min(seg1['start'], seg2['start'])
-            if union <= 0:
-                return 0.0
-            return intersection / union
-            
-        def calculate_f1_at_k(t_segs, p_segs, k):
-            tp = 0
-            matched_true = set()
-            matched_pred = set()
-            matches = []
-            for i, t_seg in enumerate(t_segs):
-                for j, p_seg in enumerate(p_segs):
-                    if t_seg['class'] == p_seg['class']:
-                        iou = calculate_iou(t_seg, p_seg)
-                        if iou >= k:
-                            matches.append((iou, i, j))
-            for iou, i, j in matches:
-                if i not in matched_true and j not in matched_pred:
-                    tp += 1
-                    matched_true.add(i)
-                    matched_pred.add(j)
+        max_seq_len = max(len(true_seq), len(pred_seq))
+        edit_score = (1.0 - (lev_dist / max_seq_len)) if max_seq_len > 0 else 1.0
+        edit_score = max(0.0, edit_score)
+
+        # 2. Reuse unified matching function
+        def calculate_f1_at_k(t_segs, p_segs, k_thresh):
+            tp, _, _, _ = match_segments_at_k(t_segs, p_segs, k_thresh)
             fp = len(p_segs) - tp
             fn = len(t_segs) - tp
             precision = tp / (tp + fp) if (tp + fp) > 0 else 0
@@ -523,18 +706,36 @@ def calculate_kpis(df: pd.DataFrame) -> pd.DataFrame:
         f1_25 = calculate_f1_at_k(true_segments, pred_segments, 0.25)
         f1_50 = calculate_f1_at_k(true_segments, pred_segments, 0.5)
 
-        # Detection Latency
-        latencies = []
-        for t_seg in true_segments:
-            mask = (h_df['window_end_relative_s'] >= t_seg['start']) & (h_df['window_end_relative_s'] <= t_seg['end'])
+        # Detection Latency, Anticipation Latency, and Detection Rate
+        det_latencies = []
+        ant_latencies = []
+        detected_count = 0
+        tau = max(h, 1.0)
+
+        for seg_idx, t_seg in enumerate(true_segments):
+            t_start = t_seg["start"]
+            t_end = t_seg["end"]
+            c = t_seg["class"]
+            prev_start = true_segments[seg_idx - 1]["start"] if seg_idx > 0 else 0.0
+            search_start = max(t_start - tau, prev_start)
+
+            mask = (h_df["window_end_relative_s"] >= search_start) & (h_df["window_end_relative_s"] <= t_end)
             seg_preds = h_df[mask]
-            correct_preds = seg_preds[seg_preds['predicted_class'] == t_seg['class']]
+            correct_preds = seg_preds[seg_preds["predicted_class"] == c]
+
             if not correct_preds.empty:
-                first_pred_time = correct_preds.iloc[0]['window_end_relative_s']
-                latency = first_pred_time - t_seg['start']
-                latencies.append(latency)
-        avg_latency = sum(latencies) / len(latencies) if latencies else float('nan')
-        
+                detected_count += 1
+                first_pred_time = correct_preds.iloc[0]["window_end_relative_s"]
+                delay = first_pred_time - t_start
+                if delay < 0:
+                    ant_latencies.append(-delay)  # Anticipation lead time in seconds
+                else:
+                    det_latencies.append(delay)    # Detection delay in seconds
+
+        det_rate = detected_count / len(true_segments) if true_segments else float("nan")
+        avg_det_latency = sum(det_latencies) / len(det_latencies) if det_latencies else None
+        avg_ant_latency = sum(ant_latencies) / len(ant_latencies) if ant_latencies else None
+
         results.append({
             "horizon_s": h,
             "accuracy": round(acc, 4),
@@ -543,7 +744,10 @@ def calculate_kpis(df: pd.DataFrame) -> pd.DataFrame:
             "f1@25": round(f1_25, 4),
             "f1@50": round(f1_50, 4),
             "levenshtein_distance": lev_dist,
-            "detection_latency_s": round(avg_latency, 4) if not pd.isna(avg_latency) else None
+            "edit_score": round(edit_score, 4),
+            "detection_rate": round(det_rate, 4),
+            "detection_latency_s": round(avg_det_latency, 4) if avg_det_latency is not None else None,
+            "anticipation_latency_s": round(avg_ant_latency, 4) if avg_ant_latency is not None else None,
         })
         
     return pd.DataFrame(results)

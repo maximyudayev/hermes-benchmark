@@ -108,17 +108,6 @@ def main():
         df_smooth = smooth_predictions(df, args.smooth_window)
         kpis_df = calculate_kpis(df)
 
-        # kpis_df.insert(0, 'model', 'Live AI')
-        # if args.compare_csvs:
-        #     for csv_path in args.compare_csvs:
-        #         if os.path.exists(csv_path):
-        #             other_df = pd.read_csv(csv_path)
-        #             if 'true_class' not in other_df.columns or other_df['true_class'].eq('Unknown').all():
-        #                 other_df = fill_annotations_from_csv(other_df, args.annotation)
-        #             other_kpis = calculate_kpis(other_df)
-        #             other_kpis.insert(0, 'model', os.path.basename(os.path.dirname(csv_path)))
-        #             kpis_df = pd.concat([kpis_df, other_kpis], ignore_index=True)
-
         kpis_path = os.path.join(args.output_dir, "kpi_comparison.csv")
         kpis_df.to_csv(kpis_path, index=False)
         print(f"KPIs saved to {kpis_path}")

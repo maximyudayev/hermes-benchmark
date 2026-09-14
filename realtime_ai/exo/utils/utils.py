@@ -66,18 +66,62 @@ def _labels_to_colors(labels):
 
 
 def _draw_ribbon(ax, time, labels, alphas=None):
-    colors = _labels_to_colors(labels)
+    if len(time) == 0:
+        ax.set_ylim(0, 1)
+        ax.set_yticks([])
+        ax.tick_params(bottom=False, labelbottom=False)
+        return
+
+    t_arr = np.asarray(time, dtype=np.float64)
+    lbl_arr = np.asarray(labels)
+    n = len(t_arr)
+
+    if n > 1:
+        dt = (t_arr[-1] - t_arr[0]) / (n - 1)
+    else:
+        dt = 0.03
+
     if alphas is not None:
-        alphas = np.asarray(alphas, dtype=np.float32).reshape(-1, 1)
-        colors = np.concatenate([colors, alphas], axis=-1)
-    ribbon = colors[np.newaxis, :, :]
-    dt = (time.iloc[-1] - time.iloc[0]) / max(len(time) - 1, 1) if len(time) > 1 else 0.03
-    ax.imshow(
-        ribbon,
-        aspect="auto",
-        interpolation="nearest",
-        extent=[time.iloc[0], time.iloc[-1] + dt, 0, 1],
+        alpha_arr = np.asarray(alphas, dtype=np.float32)
+    else:
+        alpha_arr = np.ones(n, dtype=np.float32)
+
+    xranges = []
+    facecolors = []
+
+    curr_label = lbl_arr[0]
+    curr_alpha = float(alpha_arr[0])
+    start_t = float(t_arr[0])
+
+    for i in range(1, n):
+        lbl = lbl_arr[i]
+        a = float(alpha_arr[i])
+        if lbl != curr_label or abs(a - curr_alpha) > 1e-4:
+            end_t = float(t_arr[i])
+            width = max(end_t - start_t, 1e-6)
+            xranges.append((start_t, width))
+            rgb = _hex_to_rgb(LABEL_COLORS.get(curr_label, "#808080"))
+            facecolors.append((rgb[0], rgb[1], rgb[2], curr_alpha))
+
+            curr_label = lbl
+            curr_alpha = a
+            start_t = end_t
+
+    # Final segment
+    end_t = float(t_arr[-1] + dt)
+    width = max(end_t - start_t, 1e-6)
+    xranges.append((start_t, width))
+    rgb = _hex_to_rgb(LABEL_COLORS.get(curr_label, "#808080"))
+    facecolors.append((rgb[0], rgb[1], rgb[2], curr_alpha))
+
+    ax.broken_barh(
+        xranges,
+        (0, 1),
+        facecolors=facecolors,
+        edgecolors=facecolors,
+        linewidth=0.2,
     )
+    ax.set_ylim(0, 1)
     ax.set_yticks([])
     ax.tick_params(bottom=False, labelbottom=False)
 
@@ -285,11 +329,11 @@ def plot_f1_matched_horizons(
     save_path: str,
     k: float = 0.25,
     title: str = "",
-    alpha_unmatched: float = 0.5,
+    alpha_unmatched: float = 0.3,
 ):
     """Plot segmentation ribbons highlighting True Positive (TP) predicted segments
 
-    in full saturation (100% opacity) and non-matched / false-positive segments
+    In full saturation (100% opacity) and non-matched / false-positive segments
     with reduced opacity (default 30%).
 
     Args:

@@ -20,14 +20,8 @@ class ExoImuComponent(DataComponent):
         self._data: np.ndarray
         self._dimensions = [
             {"label": "X", "value": 0},
-            {
-                "label": "Y",
-                "value": 1,
-            },
-            {
-                "label": "Z",
-                "value": 2,
-            },
+            {"label": "Y", "value": 1},
+            {"label": "Z", "value": 2},
         ]
 
         super().__init__(unique_id=unique_id)

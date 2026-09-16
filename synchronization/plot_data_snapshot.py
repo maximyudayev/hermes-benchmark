@@ -28,6 +28,7 @@ from synchronization.utils.sync_utils import add_alignment_info, extract_reftick
 from synchronization.utils.components import (
     DataComponent,
     ExoImuComponent,
+    MocapImuComponent,
     MotorComponent,
     ReferenceVideoComponent,
     SkeletonComponent,
@@ -103,6 +104,14 @@ def create_components(modalities: dict) -> tuple[DataComponent, ...]:
         offset=modalities["imu"]["offset"],
     )
 
+    mocap_imu = MocapImuComponent(
+        unique_id="mocap_imu",
+        hdf5_path=modalities["mocap_imu"]["file"],
+        data_path=modalities["mocap_imu"]["dataset"],
+        legend_name="MoCap IMU",
+        offset=modalities["mocap_imu"]["offset"],
+    )
+
     skeleton = SkeletonComponent(
         unique_id="pose",
         hdf5_path=modalities["pose"]["file"],
@@ -111,7 +120,7 @@ def create_components(modalities: dict) -> tuple[DataComponent, ...]:
         offset=modalities["pose"]["offset"],
     )
 
-    return (camera, ego, motor, imu, skeleton)
+    return (camera, ego, motor, imu, mocap_imu, skeleton)
 
 
 def connect_bbox(
@@ -282,6 +291,16 @@ if __name__ == "__main__":
         help="Offset for initial alignment to counter internal delay of the corresponding system. Can be specified multiple times.",
     )
     parser.add_argument(
+        "--start-frame",
+        type=int,
+        help="First zoom point.",
+    )
+    parser.add_argument(
+        "--end-frame",
+        type=int,
+        help="Second zoom point.",
+    )
+    parser.add_argument(
         "--out-file",
         type=str,
         required=True,
@@ -313,7 +332,7 @@ if __name__ == "__main__":
         )
     )
 
-    cam, ego, motor, imu, pose = create_components(modalities)
+    cam, ego, motor, imu, mocap_imu, pose = create_components(modalities)
     (
         combined_timestamps,
         combined_toas,
@@ -330,16 +349,20 @@ if __name__ == "__main__":
     )
 
     # Prompt user for two timestamps from the list to generate an overlaid plot
-    cam_frame_id_1 = int(
-        input(
-            f"Enter start frame between 0 and {len(combined_timestamps) - 1} (e.g. 15980): "
+    if not args.start_frame and not args.end_frame:
+        cam_frame_id_1 = int(
+            input(
+                f"Enter start frame between 0 and {len(combined_timestamps) - 1} (e.g. 15980): "
+            )
         )
-    )
-    cam_frame_id_2 = int(
-        input(
-            f"Enter end frame between {cam_frame_id_1} and {len(combined_timestamps) - 1} (e.g. 85000): "
+        cam_frame_id_2 = int(
+            input(
+                f"Enter end frame between {cam_frame_id_1} and {len(combined_timestamps) - 1} (e.g. 85000): "
+            )
         )
-    )
+    else:
+        cam_frame_id_1 = args.start_frame
+        cam_frame_id_2 = args.end_frame
     assert 0 <= cam_frame_id_1 < cam_frame_id_2 < len(combined_timestamps), (
         "Invalid frame indices."
     )
@@ -357,13 +380,17 @@ if __name__ == "__main__":
         pose.get_frame_for_toa(toa_2),
     )
 
+    motor_idx_start, motor_idx_end = (
+        motor.get_frame_for_toa(start_trial_toa),
+        motor.get_frame_for_toa(end_trial_toa),
+    )
     imu_idx_start, imu_idx_end = (
         imu.get_frame_for_toa(start_trial_toa),
         imu.get_frame_for_toa(end_trial_toa),
     )
-    motor_idx_start, motor_idx_end = (
-        motor.get_frame_for_toa(start_trial_toa),
-        motor.get_frame_for_toa(end_trial_toa),
+    mocap_imu_idx_start, mocap_imu_idx_end = (
+        mocap_imu.get_frame_for_toa(start_trial_toa),
+        mocap_imu.get_frame_for_toa(end_trial_toa),
     )
 
     cam_frame_1, cam_frame_2 = (
@@ -378,12 +405,12 @@ if __name__ == "__main__":
         pose.get_sync_info()["data"][pose_frame_id_1],
         pose.get_sync_info()["data"][pose_frame_id_2],
     )
+    motor_data = motor.get_sync_info()["data"][motor_idx_start:motor_idx_end]
+    motor_timestamps = motor.get_sync_info()["timestamps"][motor_idx_start:motor_idx_end]
     imu_data = imu.get_sync_info()["data"][imu_idx_start:imu_idx_end]
     imu_timestamps = imu.get_sync_info()["timestamps"][imu_idx_start:imu_idx_end]
-    motor_data = motor.get_sync_info()["data"][motor_idx_start:motor_idx_end]
-    motor_timestamps = motor.get_sync_info()["timestamps"][
-        motor_idx_start:motor_idx_end
-    ]
+    mocap_imu_data = mocap_imu.get_sync_info()["data"][mocap_imu_idx_start:mocap_imu_idx_end]
+    mocap_imu_timestamps = mocap_imu.get_sync_info()["timestamps"][mocap_imu_idx_start:mocap_imu_idx_end]
     duration = end_trial_toa - start_trial_toa
 
     # Generate the overlaid plot for the selected frame range using the aligned data from all components.
@@ -465,6 +492,15 @@ if __name__ == "__main__":
         alpha=0.70,
         zorder=2,
     )
+    ax_main_2.plot(
+        mocap_imu_timestamps - start_trial_toa,
+        mocap_imu_data,
+        label="Right thigh IMU",
+        color="tab:purple",
+        linewidth=0.80,
+        alpha=0.60,
+        zorder=3,
+    )
     ax_main_2.set_ylabel("IMU angle (degrees)", color="tab:orange")
     ax_main_2.tick_params(axis="y", labelcolor="tab:orange")
     lines, labels = ax_main.get_legend_handles_labels()
@@ -488,6 +524,9 @@ if __name__ == "__main__":
     ax_zoom1_2.plot(
         imu_timestamps - start_trial_toa, imu_data[:, 0], color="tab:orange"
     )
+    ax_zoom1_2.plot(
+        mocap_imu_timestamps - start_trial_toa, mocap_imu_data, color="tab:purple"
+    )
     ax_zoom1_2.tick_params(axis="y", labelcolor="tab:orange")
     ax_zoom1_2.set_ylabel("IMU angle (degrees)", color="tab:orange")
 
@@ -507,6 +546,9 @@ if __name__ == "__main__":
     ax_zoom2.grid(True, axis="x", linestyle="--", linewidth=0.5)
     ax_zoom2_2.plot(
         imu_timestamps - start_trial_toa, imu_data[:, 0], color="tab:orange"
+    )
+    ax_zoom2_2.plot(
+        mocap_imu_timestamps - start_trial_toa, mocap_imu_data, color="tab:purple"
     )
     ax_zoom2_2.tick_params(axis="y", labelcolor="tab:orange")
     ax_zoom2_2.set_ylabel("IMU angle (degrees)", color="tab:orange")

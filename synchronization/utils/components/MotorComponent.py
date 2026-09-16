@@ -11,7 +11,7 @@ class MotorComponent(DataComponent):
         hdf5_path: str,
         data_path: str,
         legend_name: str,
-        offset: int,
+        offset: float = 0.0,
     ):
         self._hdf5_path = hdf5_path
         self._data_path = data_path
@@ -27,15 +27,23 @@ class MotorComponent(DataComponent):
 
     def _read_timestamps(self):
         with h5py.File(self._hdf5_path, "r") as hdf5:
-            self._toa_s = hdf5[f"{self._data_path}/timestamp"][:, 0] - self._offset
-            if self._toa_s.ndim > 1:
-                self._toa_s = self._toa_s.flatten()
+            toa = hdf5[f"{self._data_path}/timestamp"][:]
+            if toa.ndim > 1:
+                toa = toa[:, 0]
+            toa = toa.astype(np.float64) - self._offset
+            valid = toa > 0
+            self._toa_s = toa[valid] if np.any(valid) else toa
             self._first_timestamp = float(self._toa_s[0])
             self._last_timestamp = float(self._toa_s[-1])
 
     def _read_data(self):
         with h5py.File(self._hdf5_path, "r") as hdf5:
-            self._data = hdf5[f"{self._data_path}/position"][:, 0]
+            data = hdf5[f"{self._data_path}/position"][:]
+            if data.ndim > 1 and data.shape[1] == 1:
+                data = data[:, 0]
+            if hasattr(self, "_toa_s") and len(data) > len(self._toa_s):
+                data = data[:len(self._toa_s)]
+            self._data = data
 
     def get_sync_info(self):
         return {

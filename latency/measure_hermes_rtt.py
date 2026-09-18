@@ -291,11 +291,6 @@ def handle_multi_device(args):
                     sys.exit(1)
 
 
-def handle_plot(args):
-    plot_cmd = [sys.executable, "utils/gen_plot_latency.py", args.data_path]
-    run_command(plot_cmd)
-
-
 def main():
     parser = argparse.ArgumentParser(description="HERMES Latency Benchmark runner")
     subparsers = parser.add_subparsers(
@@ -419,14 +414,6 @@ def main():
         help="Continue the sweep even if individual runs fail",
     )
 
-    # Plot subcommand
-    plot_parser = subparsers.add_parser(
-        "plot", help="Plot the latency benchmark results"
-    )
-    plot_parser.add_argument(
-        "data_path", type=str, help="Path to the directory containing latency results"
-    )
-
     args = parser.parse_args()
 
     # Ensure we run from the script's directory so relative paths resolve correctly
@@ -437,8 +424,6 @@ def main():
         handle_localhost(args)
     elif args.command == "multi-device":
         handle_multi_device(args)
-    elif args.command == "plot":
-        handle_plot(args)
 
 
 if __name__ == "__main__":

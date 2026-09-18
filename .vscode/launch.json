@@ -5,6 +5,112 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Benchmark: Serialization & Deserialization (Msgpack)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "latency/measure_serdes_latency.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--trials", "1000",
+                "--device", "laptop"
+            ]
+        },
+        {
+            "name": "Benchmark: Data Acquisition & Shared Memory Push",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "latency/measure_acquisition_latency.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--trials", "1000",
+                "--device", "laptop"
+            ]
+        },
+        {
+            "name": "Benchmark: Transmission Only (Brokered)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "latency/measure_transmission_latency.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--trials", "1000",
+                "--mode", "brokered",
+                "--device", "laptop"
+            ]
+        },
+        {
+            "name": "Benchmark: Transmission Only (Direct)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "latency/measure_transmission_latency.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--trials", "1000",
+                "--mode", "direct",
+                "--device", "laptop"
+            ]
+        },
+        {
+            "name": "Benchmark: Transmission Only (Both Brokered & Direct)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "latency/measure_transmission_latency.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--trials", "1000",
+                "--mode", "both",
+                "--device", "laptop"
+            ]
+        },
+        {
+            "name": "Benchmark: In-HERMES End-to-End RTT (Local)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "latency/measure_hermes_rtt.py",
+            "console": "integratedTerminal",
+            "args": [
+                "localhost",
+                "--device", "laptop",
+                "--mem", "5",
+                "-d", "60",
+                "-r", "2_000",
+                "-b", "100_000_000",
+                "--dry-run",
+            ]
+        },
+        {
+            "name": "Benchmark: In-HERMES End-to-End RTT (Multidevice)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "latency/measure_hermes_rtt.py",
+            "console": "integratedTerminal",
+            "args": [
+                "multi-device",
+                "--device", "laptop",
+                "--mem", "5",
+                "-d", "60",
+                "-r", "2_000",
+                "-b", "100_000_000",
+                "--master-ip", "192.168.0.190",
+                "--slave-ip", "192.168.0.130",
+                "--slave-user", "jetson",
+                "--slave-dir", "~/Documents/hermes-benchmark",
+                "--slave-os", "Linux",
+                "--dry-run",
+            ]
+        },
+        {
+            "name": "Plot: Pipeline Latency Breakdown",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "latency/plot_latency_breakdown.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--device", "laptop",
+                "--save-fig", "data/breakdown_laptop.svg"
+            ]
+        },
+        {
             "name": "Plot NTP synchronization",
             "type": "debugpy",
             "request": "launch",

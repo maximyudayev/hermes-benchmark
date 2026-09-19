@@ -1,13 +1,10 @@
 # Temporary/generated files
-###################################
 __pycache__
 *.pyc
 *.asv
-.antigravityignore
 
+.antigravityignore
 .vscode/*
-!.vscode/launch.json
-!.vscode/settings.json
 
 # Virtual environments
 .venv*/
@@ -20,8 +17,13 @@ temp/
 out/
 *.pt
 *.svg
+*.json
 
 # Distribution files
 dist/
 *.egg-info/
 build/
+
+# Exclusions
+!.vscode/launch.json
+!.vscode/settings.json

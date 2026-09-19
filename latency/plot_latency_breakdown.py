@@ -187,12 +187,12 @@ def analyze_breakdown(device: str, data_dir: Path, tx_mode: str, save_fig: str |
             "legend.fontsize": 10,
             "xtick.labelsize": 10,
             "ytick.labelsize": 10,
-            "figure.figsize": (12, 5),
+            "figure.figsize": (16, 5),
             "lines.markersize": 5,
         }
     )
 
-    fig, (ax1, ax2) = plt.subplots(1, 2)
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
 
     # --- Subplot 1: Component scaling curves (Log-Log) ---
     ax1.plot(plot_bytes, t_acq, marker="o", label="Acquisition", color="#1f77b4")
@@ -210,7 +210,7 @@ def analyze_breakdown(device: str, data_dir: Path, tx_mode: str, save_fig: str |
     ax1.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.7)
     ax1.legend()
 
-    # --- Subplot 2: Stacked Bar Chart for Selected Sizes ---
+    # --- Subplot 2: Stacked Bar Chart for Selected Sizes (Absolute) ---
     # Select a readable subset across orders of magnitude
     target_sizes = [100, 1_000, 10_000, 100_000, 1_000_000]
     sub_indices = [i for i, b in enumerate(plot_bytes) if b in target_sizes]
@@ -228,19 +228,97 @@ def analyze_breakdown(device: str, data_dir: Path, tx_mode: str, save_fig: str |
     x_indices = np.arange(len(sub_labels))
     width = 0.55
 
-    p1 = ax2.bar(x_indices, sub_acq, width, label="Acquisition", color="#1f77b4")
-    p2 = ax2.bar(x_indices, sub_ser, width, bottom=sub_acq, label="Serialization", color="#ff7f0e")
-    p3 = ax2.bar(x_indices, sub_tx, width, bottom=sub_acq + sub_ser, label=f"Transmission ({tx_mode})", color="#2ca02c")
-    p4 = ax2.bar(x_indices, sub_deser, width, bottom=sub_acq + sub_ser + sub_tx, label="Deserialization", color="#d62728")
-    p5 = ax2.bar(x_indices, sub_ing, width, bottom=sub_acq + sub_ser + sub_tx + sub_deser, label="Ingestion", color="#9467bd")
+    ax2.bar(x_indices, sub_acq, width, label="Acquisition", color="#1f77b4")
+    ax2.bar(x_indices, sub_ser, width, bottom=sub_acq, label="Serialization", color="#ff7f0e")
+    ax2.bar(x_indices, sub_tx, width, bottom=sub_acq + sub_ser, label=f"Transmission ({tx_mode})", color="#2ca02c")
+    ax2.bar(x_indices, sub_deser, width, bottom=sub_acq + sub_ser + sub_tx, label="Deserialization", color="#d62728")
+    ax2.bar(x_indices, sub_ing, width, bottom=sub_acq + sub_ser + sub_tx + sub_deser, label="Ingestion", color="#9467bd")
 
     ax2.set_xticks(x_indices)
     ax2.set_xticklabels(sub_labels, rotation=25)
     ax2.set_xlabel("Payload Size")
     ax2.set_ylabel("Latency (ms)")
-    ax2.set_title("Pipeline Latency Breakdown (Stacked)")
+    ax2.set_title("Pipeline Latency Breakdown (Absolute)")
     ax2.grid(True, axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
-    ax2.legend()
+    ax2.legend(loc="upper left")
+
+    # --- Subplot 3: 100% Stacked Bar Chart (Relative Share) ---
+    target_sizes = [100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000, 100_000_000]
+    sub_indices = [i for i, b in enumerate(plot_bytes) if b in target_sizes]
+    if not sub_indices:
+        # Pick evenly spaced points
+        sub_indices = list(range(0, len(plot_bytes), max(1, len(plot_bytes) // 6)))
+
+    sub_labels = [format_bytes(plot_bytes[i]) for i in sub_indices]
+    sub_acq = np.array([t_acq[i] for i in sub_indices])
+    sub_ser = np.array([t_ser[i] for i in sub_indices])
+    sub_tx = np.array([t_tx[i] for i in sub_indices])
+    sub_deser = np.array([t_deser[i] for i in sub_indices])
+    sub_ing = np.array([t_ing[i] for i in sub_indices])
+
+    x_indices = np.arange(len(sub_labels))
+    width = 0.55
+    sub_total = sub_acq + sub_ser + sub_tx + sub_deser + sub_ing
+    safe_total = np.where(sub_total > 0, sub_total, 1.0)
+
+    pct_acq = (sub_acq / safe_total) * 100.0
+    pct_ser = (sub_ser / safe_total) * 100.0
+    pct_tx = (sub_tx / safe_total) * 100.0
+    pct_deser = (sub_deser / safe_total) * 100.0
+    pct_ing = (sub_ing / safe_total) * 100.0
+
+    ax3.bar(x_indices, pct_acq, width, label="Acquisition", color="#1f77b4")
+    ax3.bar(x_indices, pct_ser, width, bottom=pct_acq, label="Serialization", color="#ff7f0e")
+    ax3.bar(x_indices, pct_tx, width, bottom=pct_acq + pct_ser, label=f"Transmission ({tx_mode})", color="#2ca02c")
+    ax3.bar(x_indices, pct_deser, width, bottom=pct_acq + pct_ser + pct_tx, label="Deserialization", color="#d62728")
+    ax3.bar(x_indices, pct_ing, width, bottom=pct_acq + pct_ser + pct_tx + pct_deser, label="Ingestion", color="#9467bd")
+
+    # Annotate percentage labels inside segments that are large enough (>= 8%)
+    layers = [
+        (pct_acq, np.zeros_like(pct_acq)),
+        (pct_ser, pct_acq),
+        (pct_tx, pct_acq + pct_ser),
+        (pct_deser, pct_acq + pct_ser + pct_tx),
+        (pct_ing, pct_acq + pct_ser + pct_tx + pct_deser),
+    ]
+    for layer_pct, layer_bottom in layers:
+        for idx, (p, b) in enumerate(zip(layer_pct, layer_bottom)):
+            if p >= 8.0:
+                ax3.text(
+                    idx,
+                    b + p / 2,
+                    f"{p:.0f}%",
+                    ha="center",
+                    va="center",
+                    color="white",
+                    fontsize=9,
+                    fontweight="bold",
+                )
+
+    ax3.set_xticks(x_indices)
+    ax3.set_xticklabels(sub_labels, rotation=25)
+    ax3.set_xlabel("Payload Size")
+    ax3.set_ylabel("Latency Share (%)")
+    ax3.set_ylim(0, 100)
+    ax3.set_title("Relative Latency Breakdown (100%)")
+    ax3.grid(True, axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
+    ax3.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{int(y)}%"))
+
+    # Overlay line on secondary axis showing total latency
+    ax3_sec = ax3.twinx()
+    ax3_sec.plot(
+        x_indices,
+        sub_total,
+        color="black",
+        marker="o",
+        linewidth=2,
+        markersize=6,
+        label="Total Latency",
+    )
+    ax3_sec.set_yscale("log")
+    ax3_sec.set_ylabel("Total Latency (ms)")
+    ax3_sec.grid(False)
+    ax3_sec.legend(loc="upper left")
 
     fig.tight_layout()
 

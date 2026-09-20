@@ -100,6 +100,28 @@
             ]
         },
         {
+            "name": "Benchmark: Resource Usage",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "resource_usage/log_resource_usage.py",
+            "console": "integratedTerminal",
+            "args": [
+                "-o", "resource_usage/data/laptop_metrics.csv",
+                "-i", "0.5",
+            ]
+        },
+        {
+            "name": "Analyze: Resource Usage",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "resource_usage/parse_resource_usage.py",
+            "console": "integratedTerminal",
+            "args": [
+                "resource_usage/data/laptop.csv",
+                "--plot", "resource_usage/out/laptop.svg"
+            ]
+        },
+        {
             "name": "Plot: Pipeline Latency Breakdown",
             "type": "debugpy",
             "request": "launch",

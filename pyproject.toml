@@ -1,7 +1,7 @@
 [project]
 name = "hermes-benchmark"
 version = "0.0.1"
-requires-python = ">=3.7"
+requires-python = "==3.13.*"
 authors = [
   { name="Maxim Yudayev", email="maxim.yudayev@gmail.com" },
   { name="e-Media Research Lab @ KU Leuven", email="emedia@kuleuven.be" },
@@ -25,17 +25,22 @@ classifiers = [
   "Topic :: System :: Distributed Computing"
 ]
 dependencies = [
-  "pysio-hermes==0.5.1",
+  "pysio-hermes",
   "matplotlib",
   "scipy",
   "pillow",
   "tqdm",
-  "torch>=1.13.1",
-  "scikit-learn>=1.0.2",
-  "torchvision>=0.14.1",
-  "pyarrow>=12.0.1",
-  "psutil>=7.2.2",
-  "pynvml>=11.5.3",
+  "torch",
+  "scikit-learn",
+  "torchvision",
+  "pyarrow",
+  "psutil",
+  "pynvml",
+  "rtmlib",
+  "opensim",
+  "pose2sim",
+  "pytest",
+  "pycolmap",
 ]
 
 [tool.uv.sources]

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<OpenSimDocument Version="40000">
+	<AnalyzeTool name="default_BodyKinematics">
+		<!--Name of the model file to use.-->
+		<model_file>models/Rajagopal_Pose2Sim_scaled.osim</model_file>
+		<!--Directory used for writing results.-->
+		<results_directory>./opensim/Results/BodyKinematics</results_directory>
+		<!--Storage file (.sto) or motion file (.mot) containing the time history of coordinates.-->
+		<coordinates_file>opensim/Results/trial_kinematics.mot</coordinates_file>
+		<!--Analysis set containing BodyKinematics.-->
+		<AnalysisSet>
+			<objects>
+				<BodyKinematics name="BodyKinematics">
+					<!--Flag indicating whether or not to write results to file.-->
+					<on>true</on>
+					<!--Bodies whose kinematics are to be reported. 'all' indicates all bodies.-->
+					<bodies>all</bodies>
+					<!--Express results in terms of degrees rather than radians.-->
+					<in_degrees>true</in_degrees>
+				</BodyKinematics>
+			</objects>
+		</AnalysisSet>
+	</AnalyzeTool>
+</OpenSimDocument>

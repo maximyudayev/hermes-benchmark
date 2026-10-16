@@ -1,0 +1,77 @@
+[project]
+project_dir = "."
+multi_person = false
+frame_rate = 30
+frame_range = "all"
+participant_height = 1.75
+participant_mass = 70.0
+
+[calibration]
+calibration_type = "calculate"
+
+[calibration.calculate.intrinsics]
+overwrite_intrinsics = false
+show_detection_intrinsics = false
+intrinsics_extension = "png"
+extract_every_n_frames = 10
+board_type = "checkerboard"
+corners_nb = [9, 6]
+square_size = 30.0
+
+[calibration.calculate.extrinsics]
+extrinsics_method = "scene"
+object_coords_3d = [
+    [0.00, 0.00, 0.00],
+    [0.75, 3.75, 0.00],
+    [0.00, 4.04, 2.13],
+    [1.00, 7.25, 1.85],
+    [6.05, 6.00, 0.00],
+    [6.05, 4.8, 0.00]
+]
+reprojection_error_threshold = 2.0
+
+[pose]
+vid_img_extension = "mp4"
+pose_framework = "openpose"
+pose_model = "HALPE_26"
+mode = "lightweight"
+overwrite_pose = false
+
+[synchronization]
+display_sync_plots = false
+keypoints_to_sync = ["Neck", "RAnkle", "LAnkle"]
+weights = [1.0, 1.0, 1.0]
+
+[triangulation]
+reproj_error_threshold_triangulation = 150
+likelihood_threshold_triangulation = 0.3
+min_cameras_for_triangulation = 2
+interpolation = "linear"
+interp_if_gap_smaller_than = 20
+fill_large_gaps_with = "last_value"
+show_interp_indices = false
+make_c3d = false
+undistort_points = false
+
+[filtering]
+display_figures = false
+save_filt_plots = false
+filter = true
+type = "butterworth"
+make_c3d = false
+
+[filtering.butterworth]
+cut_off_frequency = 6
+order = 4
+
+[markerAugmentation]
+feet_on_floor = false
+make_c3d = false
+
+[kinematics]
+use_augmentation = true
+use_simple_model = false
+filter_ik = false
+ik_filter_type = "acc_minimizing"
+right_left_symmetry = true
+default_height = 1.75
